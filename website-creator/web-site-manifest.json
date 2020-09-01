@@ -1,0 +1,8 @@
+{
+    "files": [
+        "./rpapis.html",
+        "./css/style.css",
+		"./js/aws-sdk.min-rp.js",
+		"./js/rpapi.js"
+    ]
+}

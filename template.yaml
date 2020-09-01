@@ -1,0 +1,212 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  "Amazon Connect Routing Profiles APIs demo"
+
+Mappings: 
+  FunctionMap:
+      Configuration:
+          S3Bucket: "amazon-connect-blogs2"
+          S3Key: "2020/routingprofilesapi/"
+  
+Parameters:
+  parS3BucketForWebSite:
+    Type: String
+    AllowedPattern: '(?=^.{3,63}$)(?!^(\d+\.)+\d+$)(^(([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])\.)*([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])$)'
+    ConstraintDescription: 'Invalid S3 Bucket name'
+    Description: Enter the (globally unique) name you would like to use for the Amazon S3 bucket where we will store the website assets. This template will fail to deploy if the bucket name you chose is currently in use.
+    
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: Amazon S3 Configuration 
+        Parameters:
+          - parS3BucketForWebSite
+      
+    ParameterLabels:
+      parS3BucketForWebSite:
+        default: Website Bucket Name
+
+Outputs:
+     
+  CloudfrontEndpoint:
+      Description: Endpoint for Cloudfront distribution
+      Value: !Join
+        - ''
+        - - 'https://'
+          - !GetAtt [RPCloudFrontDistribution, DomainName]
+          - '/rpapis.html'
+      
+    
+Resources:
+    createWebSiteS3Bucket:
+        Type: 'AWS::S3::Bucket'
+        Properties:
+            BucketName: !Ref parS3BucketForWebSite
+            PublicAccessBlockConfiguration:
+                BlockPublicAcls: True
+                BlockPublicPolicy: True
+                IgnorePublicAcls: True
+                RestrictPublicBuckets: True
+            WebsiteConfiguration:
+                IndexDocument: rpapis.html
+                ErrorDocument: error.html
+ 
+ 
+    RPs3BucketPolicy:
+        Type: AWS::S3::BucketPolicy
+        DependsOn:
+            - RPCloudFrontDistributionAccessIdentity
+        Properties:
+            Bucket: !Ref createWebSiteS3Bucket
+            PolicyDocument:
+                Statement:
+                    -
+                        Action:
+                            - "s3:GetObject"
+                        Effect: "Allow"
+                        Principal:
+                            CanonicalUser:
+                                Fn::GetAtt: [ RPCloudFrontDistributionAccessIdentity , S3CanonicalUserId ]
+                        Resource:
+                            !Sub ${createWebSiteS3Bucket.Arn}/CCP/*
+
+    RPCloudFrontDistributionAccessIdentity:
+        Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+        Properties:
+          CloudFrontOriginAccessIdentityConfig:
+            Comment: 'CloudFront endpoint for routing profiles blog'
+            
+    RPCloudFrontDistribution:
+        Type: AWS::CloudFront::Distribution
+        Properties:
+          DistributionConfig:
+            Origins:
+            - DomainName:
+                !Join
+                    - ''
+                    - - !Ref parS3BucketForWebSite
+                      - .s3.amazonaws.com
+              Id: !Ref parS3BucketForWebSite
+              OriginPath: '/CCP'
+              S3OriginConfig:
+                OriginAccessIdentity:
+                    !Join
+                        - ''
+                        - - 'origin-access-identity/cloudfront/'
+                          - !Ref RPCloudFrontDistributionAccessIdentity
+            Enabled: 'true'
+            Logging:
+                Bucket: !GetAtt createWebSiteS3Bucket.DomainName
+                Prefix: 'logs/'
+                IncludeCookies: 'true'
+            Comment: CloudFront endpoint for routing profiles blog
+            DefaultRootObject: rpapis.html
+            DefaultCacheBehavior:
+                AllowedMethods:
+                    - DELETE
+                    - GET
+                    - HEAD
+                    - OPTIONS
+                    - PATCH
+                    - POST
+                    - PUT
+                TargetOriginId: !Ref parS3BucketForWebSite
+                ForwardedValues:
+                    QueryString: true
+                    Cookies:
+                        Forward: all
+                ViewerProtocolPolicy: redirect-to-https
+            Restrictions:
+                GeoRestriction:
+                    RestrictionType: whitelist
+                    Locations:
+                        - US
+
+    RPWebSiteContentLambdaRole:
+        Type: "AWS::IAM::Role"
+        Properties:
+          AssumeRolePolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Principal:
+                  Service:
+                    - "lambda.amazonaws.com"
+                Action:
+                  - "sts:AssumeRole"
+          Path: "/"
+          Policies:
+            -
+              PolicyName: !Sub ${AWS::StackName}-website-creator-policy
+              PolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                  -
+                    Effect: "Allow"
+                    Action:
+                      - 'logs:CreateLogGroup'
+                      - 'logs:CreateLogStream'
+                      - 'logs:PutLogEvents'
+                    Resource:
+                      - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
+                  -
+                    Effect: "Allow"
+                    Action:
+                      - "s3:PutObject"
+                      - "s3:GetObject"
+                      - "s3:PutObjectAcl"
+                    Resource:
+                      -  !Join
+                          - ''
+                          - - 'arn:'
+                            - !Ref 'AWS::Partition'
+                            - ':s3:::'
+                            - !Ref parS3BucketForWebSite
+                            - '/*'
+                  -
+                    Effect: "Allow"
+                    Action:
+                      - "s3:PutBucketPublicAccessBlock"
+                    Resource:
+                      -  !Join
+                          - ''
+                          - - 'arn:'
+                            - !Ref 'AWS::Partition'
+                            - ':s3:::'
+                            - !Ref parS3BucketForWebSite
+                  -
+                    Effect: "Allow"
+                    Action:
+                      - "s3:GetObject"
+                    Resource:
+                      -  !Join
+                          - ''
+                          - - 'arn:'
+                            - !Ref 'AWS::Partition'
+                            - ':s3:::'
+                            - 'amazon-connect-blogs2'
+                            - '/*'
+
+    webSiteCreator:
+      Type: "AWS::Lambda::Function"
+      Properties:
+        Description:  >
+            AWS Lambda Function that will create the website and upload it to the S3 bucket
+        Handler: "index.handler"
+        Role: !GetAtt RPWebSiteContentLambdaRole.Arn
+        Runtime: "nodejs12.x"
+        MemorySize: 256
+        Timeout: 120
+        Code: ./website-creator/                      
+        
+    invokeWebSiteCreator:
+        Type: Custom::CreateWebSite
+        DependsOn: createWebSiteS3Bucket
+        Properties:  
+            ServiceToken:  !GetAtt webSiteCreator.Arn
+            customAction: configureWebsite
+            Region: !Ref AWS::Region
+            destS3Bucket: !Ref parS3BucketForWebSite
+            destS3KeyPrefix: CCP
