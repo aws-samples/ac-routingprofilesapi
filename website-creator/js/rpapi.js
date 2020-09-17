@@ -859,15 +859,7 @@ function showResults(message){
 }
 
 function loadConnectAPIs() {
-    /*
-     * var Service = AWS.Service; var apiLoader = AWS.apiLoader;
-     * apiLoader.services['connect'] = {}; AWS.Connect =
-     * Service.defineService('connect', ['2017-08-08']);
-     * Object.defineProperty(apiLoader.services['connect'], '2017-08-08', { get:
-     * function get() { var model = connectServiceJSON; model.paginators = {};
-     * return model; }, enumerable: true, configurable: true });
-     */
-    connect = new AWS.Connect({ region: dlgSourceRegion, endpoint: "https://91am9nwnzk.execute-api.us-west-2.amazonaws.com/Prod" }, {apiVersion: '2017-08-08'});
+    connect = new AWS.Connect({ region: dlgSourceRegion});
 }
 
 
