@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description: >
-  "Amazon Connect Routing Profiles APIs demo"
+  Amazon Connect Routing Profiles APIs demo
 
 Mappings: 
   FunctionMap:
@@ -43,6 +43,12 @@ Resources:
         Type: 'AWS::S3::Bucket'
         Properties:
             BucketName: !Ref parS3BucketForWebSite
+            VersioningConfiguration:
+              Status : Enabled
+            BucketEncryption:
+              ServerSideEncryptionConfiguration:
+              - ServerSideEncryptionByDefault:
+                  SSEAlgorithm: AES256
             PublicAccessBlockConfiguration:
                 BlockPublicAcls: True
                 BlockPublicPolicy: True
